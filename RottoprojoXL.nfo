@@ -1,0 +1,43 @@
+>>> RottoprojoXL - Players and Missiles Dot Cube in 254 bytes <<<
+
+(c) 2011-05-23 by JAC! of WUDSN
+
+I coded this one to prove that I'am absolutely bad in many things...
+... design, graphics, sound, cooking, ...
+... but hell, I do know size coding on Atari ;-)
+
+Based on the awesome code by Skate / Plush. Man, you rule!
+Related to: Rottoprojo64 Coder Pron
+http://www.pouet.net/prod.php?which=56981
+
+When I first saw Skate's prod I could not believe it.
+He did in 256 bytes what I had always planned for 512, one day, maybe.
+Later, he posted the following, and I could not stop my synapses anymore.
+
+[quote]
+I'll give you a nice example on how multiplatform 128b/256b or any similar
+size competition doesn't make sense at all.
+Here is my recently releases c64 256b (254 actually) cube rotation effect:
+https://www.pouet.net/prod.php?which=56981
+And here is the Atari 800 XL/XE port:
+http://www.akaydin.com/atari/codes/skate/previews/rottoprojo800.zip
+Both machines are 6502 based and core code is exactly the same.
+But because of the c64 and atari sprite structure differences 
+actually sprites are called players & missiles on Atari platform)
+Atari version is 384 bytes at the moment. It can be optimized but
+i don't think i will ever be able to reach 256 bytes.
+I'll try using graphic modes but i don't think it will help so much.
+[/quote]
+
+I could not stop arranging the bytes in my head for three days.
+Over and over again. Now, I'm released from this pain. Phew.
+
+This version also has some "sound", "sync" and "colors".
+And I kept the original file size despite my lovely 6-byte Heather.
+With the optimizations contained here, the core of the computation
+is down to 170 bytes. So a C64 version would be much smaller,
+but I'm preparing something that will beat it anyway ;-)
+
+Load from MyPicoDos or any other game DOS.
+Created using WUDSN IDE, visit https://www.wudsn.com for more.
+	

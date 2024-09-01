@@ -1,0 +1,301 @@
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Rottoprojo64
+; Coded by Skate / Plush
+; (C)2011 Plush
+;
+; Related to: Rottoprojo Coder Pron
+; http://www.pouet.net/prod.php?which=49904
+;
+; Story: I decided to prove that it's possible
+; to make a real rotated and projected cube
+; (with perspective) in 256 bytes on C=64
+; just like i've proved the same thing using
+; JavaScript on internet browsers a few years
+; ago. When i reached 256b limit, i remembered
+; Ninja's 1 block love and reduced the size to
+; 254 bytes to fit in 1 block. Now everybody is
+; happy. :)
+;
+; This is my first relase under Plush label.
+; Don't worry, my future releases will be the
+; parts of Plush demos (spoiler warning!), not
+; tiny codes like this one.
+;
+; Thanks to my group buddies for allowing me to
+; be a part of the Plush family.
+;
+; Tab size: 8 characters
+; Compiler: The ACME Crossassembler 
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;
+; Output
+;
+	!to "rottoprojo64.prg",cbm
+;
+; Constants
+;
+	SPRITE		= $0fc0
+	SCREEN		= $0400
+	CUBE_SIZE	= 63
+	DISTANCE	= 137
+	SCREEN_MIDDLE	= 144	; Used for both horizontal and vertical
+;
+; Zeropage Addresses
+;
+	vertexX		= $a0	; 8 bytes for 4x16-bit vertex coordinates
+	vertexY		= $a8	; 8 bytes for 4x16-bit vertex coordinates
+	vertexZ		= $b0	; 8 bytes for 4x16-bit vertex coordinates
+	rotatedVertex	= $b8	; 16-bit
+	storage1	= $ca
+	storage2	= $cb
+	stateFlag	= $cc
+	eorValue	= $cd
+;
+; Binary Address
+;
+	* = $0326
+!word	codeStartAddress
+!word	$f6ed
+
+;
+; Code Address
+;
+codeStartAddress
+;
+; Initializations
+; ---------------
+; Description: This section sets start up values
+; for screen, sprites etc. But most importantly
+; prepares cube vertexes. Since it's not very clear
+; from the code, you can use the table below to
+; get the main idea.
+;
+; Cube Vertexes Table
+; v1 : +x  +y  +z
+; v2 : +x  +y [-z] <- Vertex2 Negative Z
+; v3 : +x [-y] +z  <- Vertex3 Negative Y
+; v4 : +x [-y][-z] <- Vertex4 Negative Y and Z
+; v5 : -x  +y  +z : Mirrored
+; v6 : -x  +y  -z : Mirrored
+; v7 : -x  -y  +z : Mirrored
+; v8 : -x  -y  -z : Mirrored
+;
+; As you can see, only 4 coordinates are negative for
+; the first 4 vertexes. So we can only initialize and calculate
+; their rotation, then we can use mirrors for the rest of the
+; 4 vertexes. This way, we'll gain from both speed and size.
+;
+	ldx #CUBE_SIZE		; Warning! Loop counter equals to cube size
+	txa
+-	sta SCREEN+$3f8,x	; Set sprite data pointers
+	sta vertexX,x		; Set positive size values as default vertex
+	dex
+	bpl -
+	stx $d015		; Enable all sprites
+	!byte $a7, $93 ; lax $93 -> lda #$00 : ldx #$00
+	sta $d020		; Set border color to black
+	sta $d021		; Set screen background color to black
+-	sta $d800,x : colorMemoryHi = *-1 ; Fill color screen with black
+	sta SPRITE,x		; Clear sprite
+	dex
+	bne -
+	inc colorMemoryHi	; Fills memory to the end ($ffff)
+	bne -			; Naughty size optimization isn't it?
+	lda #$ff-CUBE_SIZE	; Inverted cube size
+	sta vertexZ+3		; Vertex2 Z coordinate high-byte
+	sta vertexY+5		; Vertex3 Y coordinate high-byte
+	sta vertexY+7		; Vertex4 Y coordinate high-byte
+	sta vertexZ+7		; Vertex4 Z coordinate high-byte
+	sta SPRITE		; Draw 2x2 dot sprite datas using inverted
+	sta SPRITE+3		; cube size (another dirty size optimization)
+;
+; Main Loop
+;
+main
+	ldy #$0e		; Starting from 2*7, decreased by 2 each step
+vertexLoop
+	cpy #$08		; We don't need to rotate all 8 vertexes,
+	bcs mirrors		; we can use mirroring, right?
+
+	tya			; Why there is no "tyx"
+	tax			; on 6510, why? ;)
+	jsr rotateVertex
+	jsr rotateVertex	; Losing 3 more bytes for faster rotation :(
+
+	ldx #$00
+	tya
+
+	bpl +
+mirrors
+	ldx #$ff
+	tya
+	sbc #$08
+
++	stx eorValue
+	tax
+	lda vertexY+1,x
+	eor eorValue
+	pha
+	lda vertexX+1,x
+	eor eorValue
+	pha
+	lda vertexZ+1,x
+	eor eorValue
+	adc #DISTANCE		;\
+	lsr			; \
+	lsr			;  \
+	sta storage1		;   Magical Linear Projection
+	lsr			;  /
+	adc storage1		; /
+	adc #$26		;/
+	sta storage1
+	pla
+	jsr calculateCoordinate	; Calculate and set
+	sta $d000,y		; x coordinate of the sprite
+	pla
+	jsr calculateCoordinate	; Calculate and set
+	sta $d001,y		; y coordinate of the sprite
+	dey
+	dey
+	bpl vertexLoop
+	cmp rotatedVertex	; Used for randomization
+	bne main
+	inc stateFlag		; Toggle second axis rotation
+	bne main
+
+;
+; Calculate Coordinate
+; --------------
+; Description:
+; Multiplies rotated coordinate with perspective
+; value and adds a constant value to move the cube
+; in the visible screen area. This routine is used
+; for both X and Y coordinates.
+;
+calculateCoordinate
+	bpl +
+	eor #$ff		; for negative values invert
+	jsr multiply		; multiply
+	eor #$ff		; and invert again
+	bne ++
++	jsr multiply		; for possitive values just multiply
+++	adc #SCREEN_MIDDLE	; move coordinate to the positive range
+	rts
+
+;
+; Rotate Vertex
+; -------------
+; Description:
+; Rotates a vertex on 1 or 2 axes.
+; First rotation is on z-axis
+; Second rotation is on y-axis (optional, depends on the state flag)
+;
+rotateVertex
+	; Rotate on z-axis
+	lda vertexY,x
+	sta rotatedVertex
+	lda vertexY+1,x
+	jsr rotateOnSingleAxis
+	sta vertexY,x
+	lda rotatedVertex+1
+	sta vertexY+1,x
+
+	lda stateFlag		; state flag check (even-odd check)
+	lsr			; for rotating on the second axis
+	bcc +			; or not
+
+	; Rotate on y-axis
+	lda vertexZ,x
+	sta rotatedVertex
+	lda vertexZ+1,x
+	jsr rotateOnSingleAxis
+	sta vertexZ,x
+	lda rotatedVertex+1
+	sta vertexZ+1,x
++	rts
+
+;
+; Rotate On Signle Axis
+; ---------------------
+; Description:
+; Rotates a vertex on a single axis
+; to rotate on x-axis inputs should be y and z coordinates
+; to rotate on y-axis inputs should be x and z coordinates
+; to rotate on z-axis inputs should be x and y coordinates
+;
+; Input:
+; vertexCoordinate1 : signed 16-bit coordinate (x,y or z)
+; vertexCoordinate2 : signed 16-bit coordinate (x,y or z)
+;
+; Formula:
+; vertexCoordinate1 -= vertexCoordinate2 / 256
+; vertexCoordinate2 += vertexCoordinate1 / 256
+; p.s: "/ 256" means getting the high byte
+;
+; Comment:
+; Skate can rotate vertexes by addition and subtraction
+; without needing any tables or lame trigonometric stuff. ;)
+;
+rotateOnSingleAxis
+	sta rotatedVertex+1
+	; vertexCoordinate1 -= vertexCoordinate2 / 256
+	clc
+	eor #$ff
+	bmi +
+	
+	adc vertexX,x
+	bcc ++
+	inc vertexX+1,x
+	bcs ++
+
++	adc vertexX,x
+	bcs ++
+	dec vertexX+1,x
+
+++	sta vertexX,x
+
+	; vertexCoordinate2 += vertexCoordinate1 / 256
+	lda vertexX+1,x
+	clc
+	bpl +
+
+	eor #$ff
+	adc rotatedVertex
+	bcc ++
+	dec rotatedVertex+1
+	bcs ++
+
++	adc rotatedVertex
+	bcc ++
+	inc rotatedVertex+1
+
+++	sta rotatedVertex
+	rts
+
+;
+; Multiply
+; --------
+; Description:
+; Modified unsigned 8-bit multiplication routine.
+; Only high byte of the 16-bit result is used.
+;
+multiply
+	sta storage2
+	tya
+    	ldx #$09
+-	lsr
+	ror storage2
+	bcc +
+	adc storage1
++	dex
+	bne -
+	rts
+;
+; End of the source code
+; ...
+; Beginning of the 3d 256b intro era on C=64!
+;
